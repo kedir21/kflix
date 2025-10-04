@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">K-flix</string>
+    <string name="title_activity_main">K-flix</string>
+    <string name="package_name">app.kedir.kflix</string>
+    <string name="custom_url_scheme">app.kedir.kflix</string>
+</resources>
