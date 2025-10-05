@@ -33,6 +33,12 @@ const VIDEO_PROVIDERS = {
     tv: (id: string, season: string, episode: string) => 
       `https://vidsrc.xyz/embed/tv?tmdb=${id}&season=${season}&episode=${episode}`,
   },
+  rive: {
+    name: "Rive",
+    movie: (id: string) => `https://rivestream.org/embed?type=movie&id=${id}`,
+    tv: (id: string, season: string, episode: string) =>
+      `https://rivestream.org/embed?type=tv&id=${id}&season=${season}&episode=${episode}`,
+  },
 };
 
 const Details = () => {
@@ -715,7 +721,7 @@ const Details = () => {
                         >
                           <div className="relative">
                             <img
-                              src={tmdb.getImageUrl(season.poster_path) || '/placeholder.svg'}
+                              src={tmdb.getImageUrl(season.poster_path) || './placeholder.svg'}
                               alt={season.name}
                               className="w-full aspect-[2/3] object-cover group-hover:scale-110 transition-transform duration-500"
                             />
@@ -840,7 +846,7 @@ const Details = () => {
                         >
                           <div className="relative">
                             <img
-                              src={tmdb.getImageUrl(actor.profile_path) || '/placeholder.svg'}
+                              src={tmdb.getImageUrl(actor.profile_path) || './placeholder.svg'}
                               alt={actor.name}
                               className="w-full aspect-square object-cover group-hover:scale-110 transition-transform duration-500"
                             />

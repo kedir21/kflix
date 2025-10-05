@@ -58,7 +58,7 @@ export const tmdb = {
   },
 
   getImageUrl: (path: string, size: 'w500' | 'original' = 'w500') => {
-    if (!path) return '/placeholder.svg';
+    if (!path) return './placeholder.svg';
     return `${IMAGE_BASE_URL}/${size}${path}`;
   },
   async getTVEpisodes(id: number, season: number) {
