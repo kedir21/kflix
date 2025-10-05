@@ -5,6 +5,9 @@ import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  // Use relative base in production so built assets are referenced as ./assets/... which works inside
+  // Android's file:// served webview. Keep root base in development for vite server.
+  base: mode === 'development' ? '/' : './',
   server: {
     host: "::",
     port: 8080,
