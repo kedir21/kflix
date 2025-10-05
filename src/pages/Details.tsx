@@ -2,7 +2,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { tmdb } from "@/lib/tmdb";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Play, Star, X, Monitor, RotateCcw, Settings, ExternalLink, ChevronRight, Film, Calendar, Clock, User, Maximize2, Minimize2, Sparkles } from "lucide-react";
+// Import Download and Check icons
+import { ArrowLeft, Play, Star, X, Monitor, RotateCcw, Settings, ExternalLink, ChevronRight, Film, Calendar, Clock, User, Maximize2, Minimize2, Sparkles, Check, Download, ChevronDown } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import BottomNav from "@/components/BottomNav";
@@ -39,12 +40,14 @@ const Details = () => {
   const navigate = useNavigate();
   const [showSearch, setShowSearch] = useState(false);
   const [showPlayer, setShowPlayer] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<keyof typeof VIDEO_PROVIDERS>("cinemaos");
   const [currentSeason, setCurrentSeason] = useState("1");
   const [currentEpisode, setCurrentEpisode] = useState("1");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
-  const [showSettings, setShowSettings] = useState(false);
+  const [isLoadingIframe, setIsLoadingIframe] = useState(true);
+  const [isDownloading, setIsDownloading] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const controlsTimeoutRef = useRef<NodeJS.Timeout>();
 
@@ -61,6 +64,51 @@ const Details = () => {
     queryFn: () => tmdb.getTVEpisodes(parseInt(id!), parseInt(currentSeason)),
     enabled: !!type && type === 'tv' && !!id && !!currentSeason && seasons.length > 0,
   });
+
+  // Function to handle download
+  const handleDownload = async () => {
+    if (!id) return;
+
+    setIsDownloading(true);
+    try {
+      let downloadUrl = '';
+
+      if (type === 'movie') {
+        downloadUrl = `https://watch.rivestream.app/download?type=movie&id=${id}`;
+      } else if (type === 'tv') {
+        downloadUrl = `https://watch.rivestream.app/download?type=tv&id=${id}&season=${currentSeason}&episode=${currentEpisode}`;
+      }
+
+      // Create a temporary anchor element to trigger download
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.setAttribute('download', '');
+      link.setAttribute('target', '_blank');
+      
+      // Append to body, click, and remove
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // Fallback: open in new tab if download doesn't trigger
+      setTimeout(() => {
+        window.open(downloadUrl, '_blank');
+      }, 1000);
+
+    } catch (error) {
+      console.error('Download failed:', error);
+      // Fallback: open in new tab
+      let downloadUrl = '';
+      if (type === 'movie') {
+        downloadUrl = `https://watch.rivestream.app/download?type=movie&id=${id}`;
+      } else if (type === 'tv') {
+        downloadUrl = `https://watch.rivestream.app/download?type=tv&id=${id}&season=${currentSeason}&episode=${currentEpisode}`;
+      }
+      window.open(downloadUrl, '_blank');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   const getVideoUrl = () => {
     if (type === 'movie') {
@@ -84,6 +132,7 @@ const Details = () => {
 
   const handleReload = () => {
     if (iframeRef.current) {
+      setIsLoadingIframe(true);
       iframeRef.current.src = iframeRef.current.src;
     }
   };
@@ -112,14 +161,17 @@ const Details = () => {
     if (showPlayer) {
       resetControlsTimeout();
     }
+    if (showPlayer) {
+      setIsLoadingIframe(true);
+    }
     return () => {
       if (controlsTimeoutRef.current) {
         clearTimeout(controlsTimeoutRef.current);
       }
     };
-  }, [showPlayer]);
+  }, [showPlayer, selectedProvider, currentSeason, currentEpisode]);
 
-  // Enhanced Video Player Modal with Premium Design
+  // Simplified Video Player Modal without settings
   const VideoPlayerModal = () => (
     <Dialog open={showPlayer} onOpenChange={setShowPlayer}>
       <DialogContent className={`w-full p-0 bg-black border-0 max-w-none overflow-hidden ${
@@ -142,6 +194,7 @@ const Details = () => {
                     className="p-2 bg-black/50 backdrop-blur-sm rounded-xl text-white/90 hover:text-white hover:bg-black/70 transition-all"
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
+                    aria-label="Close video player"
                   >
                     <X className="w-5 h-5" />
                   </motion.button>
@@ -177,22 +230,34 @@ const Details = () => {
             allowFullScreen
             allow="autoplay; encrypted-media; fullscreen"
             title="Video Player"
+            onLoad={() => setIsLoadingIframe(false)}
           />
           
           {/* Enhanced Loading Indicator */}
-          <div className="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="text-center"
-            >
-              <div className="w-16 h-16 border-3 border-white/20 border-t-white rounded-full animate-spin mb-4" />
-              <p className="text-white/80 text-sm font-medium">Loading stream...</p>
-            </motion.div>
-          </div>
+          <AnimatePresence>
+            {isLoadingIframe && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none"
+              >
+                <div className="text-center">
+                  <motion.div
+                    initial={{ rotate: 0 }}
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                    className="w-16 h-16 border-3 border-white/20 border-t-white rounded-full mb-4"
+                  />
+                  <p className="text-white/80 text-sm font-medium">Loading stream...</p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
-        {/* Bottom Controls */}
+        {/* Bottom Controls - Simplified without settings */}
         <AnimatePresence>
           {showControls && (
             <motion.div
@@ -209,16 +274,9 @@ const Details = () => {
                     className="p-3 bg-white/10 backdrop-blur-sm rounded-xl text-white hover:bg-white/20 transition-all"
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
+                    aria-label="Reload video stream"
                   >
                     <RotateCcw className="w-5 h-5" />
-                  </motion.button>
-                  <motion.button
-                    onClick={() => setShowSettings(!showSettings)}
-                    className="p-3 bg-white/10 backdrop-blur-sm rounded-xl text-white hover:bg-white/20 transition-all"
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                  >
-                    <Settings className="w-5 h-5" />
                   </motion.button>
                 </div>
                 <div className="flex items-center gap-3">
@@ -227,6 +285,7 @@ const Details = () => {
                     className="px-4 py-3 bg-white/10 backdrop-blur-sm rounded-xl text-white hover:bg-white/20 transition-all text-sm font-medium flex items-center gap-2"
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
+                    aria-label="Open in external browser"
                   >
                     <ExternalLink className="w-4 h-4" />
                     External
@@ -236,6 +295,7 @@ const Details = () => {
                     className="p-3 bg-white/10 backdrop-blur-sm rounded-xl text-white hover:bg-white/20 transition-all"
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
+                    aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
                   >
                     {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
                   </motion.button>
@@ -244,128 +304,159 @@ const Details = () => {
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* Enhanced Settings Panel */}
-        <AnimatePresence>
-          {showSettings && (
-            <motion.div
-              initial={{ opacity: 0, x: '100%' }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: '100%' }}
-              transition={{ type: "spring", damping: 30, stiffness: 300 }}
-              className="absolute top-0 right-0 bottom-0 w-80 max-w-full bg-gray-900/95 backdrop-blur-xl p-6 overflow-y-auto z-30 border-l border-white/10"
-            >
-              <div className="flex items-center justify-between mb-8">
-                <h3 className="text-white font-bold text-xl">Player Settings</h3>
-                <button 
-                  onClick={() => setShowSettings(false)} 
-                  className="p-2 text-white/60 hover:text-white hover:bg-white/10 rounded-lg transition-all"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="space-y-8">
-                {/* Source Selection */}
-                <div>
-                  <label className="text-white font-semibold mb-4 block text-lg">Video Source</label>
-                  <div className="space-y-3">
-                    {Object.entries(VIDEO_PROVIDERS).map(([key, provider]) => (
-                      <motion.button
-                        key={key}
-                        onClick={() => setSelectedProvider(key as keyof typeof VIDEO_PROVIDERS)}
-                        className={`w-full p-4 rounded-xl text-left transition-all ${
-                          selectedProvider === key 
-                            ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg' 
-                            : 'bg-white/5 text-white/80 hover:bg-white/10'
-                        }`}
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">{provider.name}</span>
-                          {selectedProvider === key && (
-                            <motion.div
-                              initial={{ scale: 0 }}
-                              animate={{ scale: 1 }}
-                              className="w-2 h-2 bg-white rounded-full"
-                            />
-                          )}
-                        </div>
-                      </motion.button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* TV Show Controls */}
-                {type === 'tv' && seasons.length > 0 && (
-                  <>
-                    <div>
-                      <label className="text-white font-semibold mb-4 block text-lg">Season & Episode</label>
-                      <div className="grid grid-cols-2 gap-3">
-                        <Select value={currentSeason} onValueChange={setCurrentSeason}>
-                          <SelectTrigger className="bg-white/5 border-white/10 text-white">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="bg-gray-800 border-white/10">
-                            {seasons.map((season: any) => (
-                              <SelectItem key={season.id} value={season.season_number.toString()} className="text-white">
-                                Season {season.season_number}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Select value={currentEpisode} onValueChange={setCurrentEpisode} disabled={episodesLoading}>
-                          <SelectTrigger className="bg-white/5 border-white/10 text-white">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="bg-gray-800 border-white/10">
-                            {episodesLoading ? (
-                              <SelectItem value="" disabled className="text-gray-400">Loading...</SelectItem>
-                            ) : (
-                              (episodes?.episodes?.map((episode: any) => (
-                                <SelectItem key={episode.id} value={episode.episode_number.toString()} className="text-white">
-                                  E{episode.episode_number}
-                                </SelectItem>
-                              )) ?? <SelectItem value="" disabled>No episodes</SelectItem>)
-                            )}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* Quick Actions */}
-                <div>
-                  <label className="text-white font-semibold mb-4 block text-lg">Quick Actions</label>
-                  <div className="space-y-3">
-                    <motion.button
-                      onClick={() => window.open(getVideoUrl(), '_blank')}
-                      className="w-full p-4 bg-white/5 hover:bg-white/10 text-white rounded-xl flex items-center justify-between transition-all"
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                    >
-                      <span className="font-medium">Open in Browser</span>
-                      <ExternalLink className="w-4 h-4" />
-                    </motion.button>
-                    <motion.button
-                      onClick={handleReload}
-                      className="w-full p-4 bg-white/5 hover:bg-white/10 text-white rounded-xl flex items-center justify-between transition-all"
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                    >
-                      <span className="font-medium">Reload Stream</span>
-                      <RotateCcw className="w-4 h-4" />
-                    </motion.button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </DialogContent>
     </Dialog>
+  );
+
+  // Settings Panel Component for Details Page
+  const SettingsPanel = () => (
+    <AnimatePresence>
+      {showSettings && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: "auto" }}
+          exit={{ opacity: 0, height: 0 }}
+          transition={{ duration: 0.3, ease: "easeInOut" }}
+          className="overflow-hidden"
+        >
+          <motion.div 
+            initial={{ y: -20 }}
+            animate={{ y: 0 }}
+            exit={{ y: -20 }}
+            transition={{ duration: 0.3 }}
+            className="bg-black/30 backdrop-blur-xl rounded-2xl p-6 border border-white/10 mt-4"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-white font-bold text-xl">Player Settings</h3>
+              <button 
+                onClick={() => setShowSettings(false)} 
+                className="p-2 text-white/60 hover:text-white hover:bg-white/10 rounded-lg transition-all"
+                aria-label="Close settings panel"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              {/* Source Selection */}
+              <div>
+                <label className="text-white font-semibold mb-3 block text-lg">Video Source</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {Object.entries(VIDEO_PROVIDERS).map(([key, provider]) => (
+                    <motion.button
+                      key={key}
+                      onClick={() => setSelectedProvider(key as keyof typeof VIDEO_PROVIDERS)}
+                      className={`p-4 rounded-xl text-left transition-all ${
+                        selectedProvider === key 
+                          ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg' 
+                          : 'bg-white/5 text-white/80 hover:bg-white/10'
+                      }`}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">{provider.name}</span>
+                        {selectedProvider === key && (
+                          <motion.div
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                            className="text-white"
+                          >
+                            <Check className="w-5 h-5" />
+                          </motion.div>
+                        )}
+                      </div>
+                    </motion.button>
+                  ))}
+                </div>
+              </div>
+
+              {/* TV Show Controls */}
+              {type === 'tv' && seasons.length > 0 && (
+                <>
+                  <div>
+                    <label className="text-white font-semibold mb-3 block text-lg">Season & Episode</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <Select value={currentSeason} onValueChange={setCurrentSeason}>
+                        <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                          <SelectValue placeholder="Select Season" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-800 border-white/10">
+                          {seasons.map((season: any) => (
+                            <SelectItem key={season.id} value={season.season_number.toString()} className="text-white">
+                              Season {season.season_number}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Select value={currentEpisode} onValueChange={setCurrentEpisode} disabled={episodesLoading}>
+                        <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                          <SelectValue placeholder="Select Episode" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-800 border-white/10">
+                          {episodesLoading ? (
+                            <SelectItem value="" disabled className="text-gray-400">Loading...</SelectItem>
+                          ) : (
+                            (episodes?.episodes?.map((episode: any) => (
+                              <SelectItem key={episode.id} value={episode.episode_number.toString()} className="text-white">
+                                E{episode.episode_number}
+                              </SelectItem>
+                            )) ?? <SelectItem value="" disabled>No episodes</SelectItem>)
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Quick Actions */}
+              <div>
+                <label className="text-white font-semibold mb-3 block text-lg">Quick Actions</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <motion.button
+                    onClick={() => window.open(getVideoUrl(), '_blank')}
+                    className="p-4 bg-white/5 hover:bg-white/10 text-white rounded-xl flex items-center justify-between transition-all"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    aria-label="Open stream in a new browser tab"
+                  >
+                    <span className="font-medium">Open in Browser</span>
+                    <ExternalLink className="w-4 h-4" />
+                  </motion.button>
+                  <motion.button
+                    onClick={handleDownload}
+                    disabled={isDownloading}
+                    className="p-4 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 rounded-xl flex items-center justify-between transition-all disabled:opacity-50"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    aria-label="Download file"
+                  >
+                    <span className="font-medium">
+                      {isDownloading ? 'Downloading...' : 'Download File'}
+                    </span>
+                    <Download className="w-4 h-4" />
+                  </motion.button>
+                </div>
+              </div>
+
+              {/* Current Selection Info */}
+              <div className="bg-white/5 rounded-xl p-4">
+                <h4 className="text-white font-semibold mb-2">Current Selection</h4>
+                <div className="text-sm text-gray-300 space-y-1">
+                  <p>Provider: <span className="text-white">{VIDEO_PROVIDERS[selectedProvider].name}</span></p>
+                  {type === 'tv' && (
+                    <p>Episode: <span className="text-white">S{currentSeason}E{currentEpisode}</span></p>
+                  )}
+                  <p>Ready to play: <span className="text-green-400">Yes</span></p>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 
   if (isLoading) {
@@ -423,6 +514,7 @@ const Details = () => {
             className="p-3 bg-black/50 backdrop-blur-xl rounded-2xl text-white hover:bg-black/70 transition-all border border-white/10 shadow-2xl"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
+            aria-label="Go back"
           >
             <ArrowLeft className="w-6 h-6" />
           </motion.button>
@@ -496,7 +588,7 @@ const Details = () => {
                 </div>
               </div>
 
-              {/* Action Buttons */}
+              {/* Action Buttons - Added Download Button */}
               <motion.div
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
@@ -508,6 +600,7 @@ const Details = () => {
                   className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white rounded-2xl shadow-2xl hover:shadow-3xl transition-all duration-300 text-lg font-bold flex items-center gap-3 group"
                   whileHover={{ scale: 1.05, y: -2 }}
                   whileTap={{ scale: 0.95 }}
+                  aria-label="Watch now"
                 >
                   <div className="p-2 bg-white/20 rounded-lg group-hover:scale-110 transition-transform">
                     <Play className="w-6 h-6" fill="currentColor" />
@@ -515,14 +608,41 @@ const Details = () => {
                   Watch Now
                 </motion.button>
                 
+                {/* Download Button */}
                 <motion.button
-                  onClick={() => setShowSettings(true)}
-                  className="px-6 py-4 bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white rounded-2xl border border-white/20 transition-all duration-300 font-medium flex items-center gap-3"
+                  onClick={handleDownload}
+                  disabled={isDownloading}
+                  className="px-6 py-4 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-600/50 text-white rounded-2xl shadow-2xl hover:shadow-3xl transition-all duration-300 font-bold flex items-center gap-3 group"
+                  whileHover={{ scale: 1.05, y: -2 }}
+                  whileTap={{ scale: 0.95 }}
+                  aria-label="Download file"
+                >
+                  <div className="p-2 bg-white/20 rounded-lg group-hover:scale-110 transition-transform">
+                    <Download className="w-5 h-5" />
+                  </div>
+                  {isDownloading ? 'Downloading...' : 'Download'}
+                </motion.button>
+                
+                {/* Settings Toggle Button */}
+                <motion.button
+                  onClick={() => setShowSettings(!showSettings)}
+                  className={`px-6 py-4 rounded-2xl border transition-all duration-300 font-medium flex items-center gap-3 ${
+                    showSettings 
+                      ? 'bg-blue-500 text-white border-blue-500' 
+                      : 'bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white border-white/20'
+                  }`}
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
+                  aria-label="Player settings"
                 >
                   <Settings className="w-5 h-5" />
                   Settings
+                  <motion.div
+                    animate={{ rotate: showSettings ? 180 : 0 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <ChevronDown className="w-4 h-4" />
+                  </motion.div>
                 </motion.button>
               </motion.div>
             </motion.div>
@@ -530,8 +650,15 @@ const Details = () => {
         </motion.div>
       </div>
 
+      {/* Settings Panel */}
+      <div className="container mx-auto px-4 -mt-8 relative z-10">
+        <div className="max-w-6xl mx-auto">
+          <SettingsPanel />
+        </div>
+      </div>
+
       {/* Content Section */}
-      <div className="container mx-auto px-4 py-8 -mt-8 relative z-10">
+      <div className="container mx-auto px-4 py-8 relative z-10">
         <div className="max-w-6xl mx-auto">
           <Tabs defaultValue="overview" className="w-full">
             <TabsList className="grid w-full grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 bg-black/30 backdrop-blur-xl border border-white/10 rounded-2xl p-2 mb-8">
